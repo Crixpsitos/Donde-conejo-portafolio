@@ -34,7 +34,7 @@ export default defineConfig({
     },
   ],
   webServer: {
-    command: 'pnpm dev',
+    command: 'node node_modules/next/dist/bin/next dev',
     reuseExistingServer: true,
     url: 'http://localhost:3000',
   },

@@ -38,4 +38,49 @@ test.describe('Admin Panel', () => {
     const editViewArtifact = page.locator('input[name="email"]')
     await expect(editViewArtifact).toBeVisible()
   })
+
+  test('highlights the exact value for the focused homepage field', async () => {
+    await page.goto('http://localhost:3000/admin/globals/homepage')
+
+    const previewFrame = page.locator('iframe[src*="preview="]')
+    await expect(previewFrame).toBeVisible()
+    const preview = page.frameLocator('iframe[src*="preview="]')
+    await expect(preview.locator('[data-preview-field="hero.name"]')).toBeVisible()
+
+    await page.getByRole('button', { name: '01 · Hero' }).click()
+    await page.locator('input[name="hero.name"]').focus()
+    await expect(preview.locator('[data-preview-field="hero.name"]')).toHaveAttribute(
+      'data-preview-active',
+      'true',
+    )
+
+    await page.getByRole('button', { name: '04 · Investigación' }).click()
+    await page.locator('input[name="research.title"]').focus()
+    await expect(preview.locator('[data-preview-field="research.title"]')).toHaveAttribute(
+      'data-preview-active',
+      'true',
+    )
+    await expect(preview.locator('[data-preview-field="hero.name"]')).not.toHaveAttribute(
+      'data-preview-active',
+      'true',
+    )
+
+    await previewFrame.evaluate((frame: HTMLIFrameElement) => {
+      frame.contentWindow?.postMessage(
+        {
+          type: 'donde-conejo:highlight-field',
+          fieldPath: 'research.topics.0.title',
+        },
+        new URL(frame.src).origin,
+      )
+    })
+    await expect(preview.locator('[data-preview-field="research.topics.0.title"]')).toHaveAttribute(
+      'data-preview-active',
+      'true',
+    )
+    await expect(preview.locator('[data-preview-field="research.title"]')).not.toHaveAttribute(
+      'data-preview-active',
+      'true',
+    )
+  })
 })

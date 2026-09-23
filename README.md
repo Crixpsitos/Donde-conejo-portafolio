@@ -24,6 +24,12 @@ After you click the `Deploy` button above, you'll want to have standalone copy o
 
 That's it! Changes made in `./src` will be reflected in your app. Follow the on-screen instructions to login and create your first admin user. Then check out [Production](#production) once you're ready to build and serve your app, and [Deployment](#deployment) when you're ready to go live.
 
+### Google Cloud Storage
+
+Media uploads use local storage when `GCS_BUCKET` is empty. To store media in Google Cloud Storage, set `GCS_BUCKET` and `GCS_PROJECT_ID` in your environment.
+
+Authentication uses Google Application Default Credentials. In production, prefer attaching a service account to the runtime. Locally, either set `GOOGLE_APPLICATION_CREDENTIALS` to the path of a service account JSON file or provide that JSON as a single-line value in `GCS_CREDENTIALS`. The service account needs permission to create, read, and delete objects in the configured bucket.
+
 #### Docker (Optional)
 
 If you prefer to use Docker for local development instead of a local MongoDB instance, the provided docker-compose.yml file can be used.

@@ -69,6 +69,7 @@ export interface Config {
   collections: {
     users: User;
     media: Media;
+    locations: Location;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
@@ -78,6 +79,7 @@ export interface Config {
   collectionsSelect: {
     users: UsersSelect<false> | UsersSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
+    locations: LocationsSelect<false> | LocationsSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
@@ -86,10 +88,16 @@ export interface Config {
   db: {
     defaultIDType: string;
   };
-  fallbackLocale: null;
-  globals: {};
-  globalsSelect: {};
-  locale: null;
+  fallbackLocale: ('false' | 'none' | 'null') | false | null | ('es' | 'fr' | 'en') | ('es' | 'fr' | 'en')[];
+  globals: {
+    'site-settings': SiteSetting;
+    homepage: Homepage;
+  };
+  globalsSelect: {
+    'site-settings': SiteSettingsSelect<false> | SiteSettingsSelect<true>;
+    homepage: HomepageSelect<false> | HomepageSelect<true>;
+  };
+  locale: 'es' | 'fr' | 'en';
   widgets: {
     collections: CollectionsWidget;
   };
@@ -130,6 +138,7 @@ export interface User {
   resetPasswordExpiration?: string | null;
   salt?: string | null;
   hash?: string | null;
+  resetPasswordRequestedAt?: string | null;
   loginAttempts?: number | null;
   lockUntil?: string | null;
   sessions?:
@@ -149,6 +158,18 @@ export interface User {
 export interface Media {
   id: string;
   alt: string;
+  /**
+   * Controla cuánto tiempo los navegadores y CDN conservan este archivo.
+   */
+  cache: {
+    preset: 'long-term' | 'short' | 'revalidate' | 'no-store' | 'custom';
+    /**
+     * Ejemplo: public, max-age=86400, stale-while-revalidate=3600
+     */
+    customValue?: string | null;
+  };
+  cacheControl?: string | null;
+  _objectKey?: string | null;
   updatedAt: string;
   createdAt: string;
   url?: string | null;
@@ -160,6 +181,25 @@ export interface Media {
   height?: number | null;
   focalX?: number | null;
   focalY?: number | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "locations".
+ */
+export interface Location {
+  id: string;
+  name: string;
+  code: string;
+  status: 'open' | 'coming-soon' | 'temporarily-closed';
+  description: string;
+  city: string;
+  address?: string | null;
+  schedule: string;
+  mapUrl?: string | null;
+  image?: (string | null) | Media;
+  updatedAt: string;
+  createdAt: string;
+  _status?: ('draft' | 'published') | null;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -192,6 +232,10 @@ export interface PayloadLockedDocument {
     | ({
         relationTo: 'media';
         value: string | Media;
+      } | null)
+    | ({
+        relationTo: 'locations';
+        value: string | Location;
       } | null);
   globalSlug?: string | null;
   user: {
@@ -247,6 +291,7 @@ export interface UsersSelect<T extends boolean = true> {
   resetPasswordExpiration?: T;
   salt?: T;
   hash?: T;
+  resetPasswordRequestedAt?: T;
   loginAttempts?: T;
   lockUntil?: T;
   sessions?:
@@ -263,6 +308,14 @@ export interface UsersSelect<T extends boolean = true> {
  */
 export interface MediaSelect<T extends boolean = true> {
   alt?: T;
+  cache?:
+    | T
+    | {
+        preset?: T;
+        customValue?: T;
+      };
+  cacheControl?: T;
+  _objectKey?: T;
   updatedAt?: T;
   createdAt?: T;
   url?: T;
@@ -274,6 +327,24 @@ export interface MediaSelect<T extends boolean = true> {
   height?: T;
   focalX?: T;
   focalY?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "locations_select".
+ */
+export interface LocationsSelect<T extends boolean = true> {
+  name?: T;
+  code?: T;
+  status?: T;
+  description?: T;
+  city?: T;
+  address?: T;
+  schedule?: T;
+  mapUrl?: T;
+  image?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  _status?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -314,6 +385,457 @@ export interface PayloadMigrationsSelect<T extends boolean = true> {
   batch?: T;
   updatedAt?: T;
   createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "site-settings".
+ */
+export interface SiteSetting {
+  id: string;
+  siteName: string;
+  /**
+   * URL pública sin barra final, por ejemplo https://example.com
+   */
+  siteUrl: string;
+  contact?: {
+    email?: string | null;
+    location?: string | null;
+  };
+  socialLinks?:
+    | {
+        platform: 'instagram' | 'whatsapp' | 'linkedin';
+        label: string;
+        url: string;
+        id?: string | null;
+      }[]
+    | null;
+  footer?: {
+    descriptor?: string | null;
+    quote?: string | null;
+    legal?: string | null;
+  };
+  /**
+   * Usa %s donde debe aparecer el título de cada página.
+   */
+  titleTemplate?: string | null;
+  defaultMetaTitle: string;
+  defaultMetaDescription: string;
+  defaultShareImage?: (string | null) | Media;
+  /**
+   * Desactívalo para indicar noindex y nofollow desde el frontend.
+   */
+  allowIndexing?: boolean | null;
+  updatedAt?: string | null;
+  createdAt?: string | null;
+}
+/**
+ * Puedes guardar y publicar únicamente los campos que necesites completar.
+ *
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "homepage".
+ */
+export interface Homepage {
+  id: string;
+  hero?: {
+    /**
+     * Aparece sobre el nombre destacado, por ejemplo: Juan David Conejo Acuña.
+     */
+    title?: string | null;
+    /**
+     * Resumen visible en la primera pantalla de la web.
+     */
+    description?: string | null;
+    /**
+     * El texto de mayor tamaño, por ejemplo: Conejo.
+     */
+    name?: string | null;
+    roles?:
+      | {
+          label?: string | null;
+          id?: string | null;
+        }[]
+      | null;
+    quote?: string | null;
+    portrait?: (string | null) | Media;
+    imageCaption?: {
+      eyebrow?: string | null;
+      title?: string | null;
+      /**
+       * Ejemplo: 93.5 °C · 9.2 bar.
+       */
+      technicalValue?: string | null;
+    };
+    metrics?:
+      | {
+          value?: string | null;
+          label?: string | null;
+          accent?: boolean | null;
+          id?: string | null;
+        }[]
+      | null;
+  };
+  manifesto?: {
+    quote?: string | null;
+    principles?:
+      | {
+          text?: string | null;
+          id?: string | null;
+        }[]
+      | null;
+    facts?:
+      | {
+          label?: string | null;
+          value?: string | null;
+          detail?: string | null;
+          id?: string | null;
+        }[]
+      | null;
+  };
+  craft?: {
+    /**
+     * Es el encabezado grande que verá el visitante.
+     */
+    title?: string | null;
+    /**
+     * Un párrafo breve que explica esta sección.
+     */
+    description?: string | null;
+    pillars?:
+      | {
+          eyebrow?: string | null;
+          badge?: string | null;
+          title?: string | null;
+          description?: string | null;
+          image?: (string | null) | Media;
+          parameters?:
+            | {
+                label?: string | null;
+                value?: string | null;
+                id?: string | null;
+              }[]
+            | null;
+          id?: string | null;
+        }[]
+      | null;
+  };
+  research?: {
+    /**
+     * Es el encabezado grande que verá el visitante.
+     */
+    title?: string | null;
+    /**
+     * Un párrafo breve que explica esta sección.
+     */
+    description?: string | null;
+    topics?:
+      | {
+          icon?: ('flask' | 'bean' | 'droplets' | 'thermometer') | null;
+          title?: string | null;
+          description?: string | null;
+          id?: string | null;
+        }[]
+      | null;
+    sensoryProfile?: {
+      title?: string | null;
+      score?: number | null;
+      flavorNotes?: string | null;
+      attributes?:
+        | {
+            label?: string | null;
+            value?: number | null;
+            id?: string | null;
+          }[]
+        | null;
+      measurements?:
+        | {
+            label?: string | null;
+            value?: string | null;
+            id?: string | null;
+          }[]
+        | null;
+    };
+  };
+  entrepreneurship?: {
+    /**
+     * Es el encabezado grande que verá el visitante.
+     */
+    title?: string | null;
+    /**
+     * Un párrafo breve que explica esta sección.
+     */
+    description?: string | null;
+    quote?: string | null;
+    locations?: (string | Location)[] | null;
+  };
+  community?: {
+    /**
+     * Es el encabezado grande que verá el visitante.
+     */
+    title?: string | null;
+    /**
+     * Un párrafo breve que explica esta sección.
+     */
+    description?: string | null;
+    initiative?: {
+      title?: string | null;
+      description?: string | null;
+    };
+    metrics?:
+      | {
+          value?: string | null;
+          label?: string | null;
+          description?: string | null;
+          id?: string | null;
+        }[]
+      | null;
+    quote?: string | null;
+  };
+  journey?: {
+    /**
+     * Es el encabezado grande que verá el visitante.
+     */
+    title?: string | null;
+    /**
+     * Un párrafo breve que explica esta sección.
+     */
+    description?: string | null;
+    chapters?:
+      | {
+          period?: string | null;
+          title?: string | null;
+          description?: string | null;
+          id?: string | null;
+        }[]
+      | null;
+  };
+  contact?: {
+    /**
+     * Es el encabezado grande que verá el visitante.
+     */
+    title?: string | null;
+    /**
+     * Un párrafo breve que explica esta sección.
+     */
+    description?: string | null;
+    services?:
+      | {
+          label?: string | null;
+          id?: string | null;
+        }[]
+      | null;
+  };
+  _status?: ('draft' | 'published') | null;
+  updatedAt?: string | null;
+  createdAt?: string | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "site-settings_select".
+ */
+export interface SiteSettingsSelect<T extends boolean = true> {
+  siteName?: T;
+  siteUrl?: T;
+  contact?:
+    | T
+    | {
+        email?: T;
+        location?: T;
+      };
+  socialLinks?:
+    | T
+    | {
+        platform?: T;
+        label?: T;
+        url?: T;
+        id?: T;
+      };
+  footer?:
+    | T
+    | {
+        descriptor?: T;
+        quote?: T;
+        legal?: T;
+      };
+  titleTemplate?: T;
+  defaultMetaTitle?: T;
+  defaultMetaDescription?: T;
+  defaultShareImage?: T;
+  allowIndexing?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  globalType?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "homepage_select".
+ */
+export interface HomepageSelect<T extends boolean = true> {
+  hero?:
+    | T
+    | {
+        title?: T;
+        description?: T;
+        name?: T;
+        roles?:
+          | T
+          | {
+              label?: T;
+              id?: T;
+            };
+        quote?: T;
+        portrait?: T;
+        imageCaption?:
+          | T
+          | {
+              eyebrow?: T;
+              title?: T;
+              technicalValue?: T;
+            };
+        metrics?:
+          | T
+          | {
+              value?: T;
+              label?: T;
+              accent?: T;
+              id?: T;
+            };
+      };
+  manifesto?:
+    | T
+    | {
+        quote?: T;
+        principles?:
+          | T
+          | {
+              text?: T;
+              id?: T;
+            };
+        facts?:
+          | T
+          | {
+              label?: T;
+              value?: T;
+              detail?: T;
+              id?: T;
+            };
+      };
+  craft?:
+    | T
+    | {
+        title?: T;
+        description?: T;
+        pillars?:
+          | T
+          | {
+              eyebrow?: T;
+              badge?: T;
+              title?: T;
+              description?: T;
+              image?: T;
+              parameters?:
+                | T
+                | {
+                    label?: T;
+                    value?: T;
+                    id?: T;
+                  };
+              id?: T;
+            };
+      };
+  research?:
+    | T
+    | {
+        title?: T;
+        description?: T;
+        topics?:
+          | T
+          | {
+              icon?: T;
+              title?: T;
+              description?: T;
+              id?: T;
+            };
+        sensoryProfile?:
+          | T
+          | {
+              title?: T;
+              score?: T;
+              flavorNotes?: T;
+              attributes?:
+                | T
+                | {
+                    label?: T;
+                    value?: T;
+                    id?: T;
+                  };
+              measurements?:
+                | T
+                | {
+                    label?: T;
+                    value?: T;
+                    id?: T;
+                  };
+            };
+      };
+  entrepreneurship?:
+    | T
+    | {
+        title?: T;
+        description?: T;
+        quote?: T;
+        locations?: T;
+      };
+  community?:
+    | T
+    | {
+        title?: T;
+        description?: T;
+        initiative?:
+          | T
+          | {
+              title?: T;
+              description?: T;
+            };
+        metrics?:
+          | T
+          | {
+              value?: T;
+              label?: T;
+              description?: T;
+              id?: T;
+            };
+        quote?: T;
+      };
+  journey?:
+    | T
+    | {
+        title?: T;
+        description?: T;
+        chapters?:
+          | T
+          | {
+              period?: T;
+              title?: T;
+              description?: T;
+              id?: T;
+            };
+      };
+  contact?:
+    | T
+    | {
+        title?: T;
+        description?: T;
+        services?:
+          | T
+          | {
+              label?: T;
+              id?: T;
+            };
+      };
+  _status?: T;
+  updatedAt?: T;
+  createdAt?: T;
+  globalType?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
