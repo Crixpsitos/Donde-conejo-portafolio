@@ -81,7 +81,14 @@ export default buildConfig({
       alwaysInsertFields: true,
       bucket: gcsBucket,
       collections: {
-        media: true,
+        media: {
+          disablePayloadAccessControl: true,
+          generateFileURL: ({ filename, prefix }) => {
+            const storagePath = prefix ? `${prefix}/${filename}` : filename
+
+            return `https://firebasestorage.googleapis.com/v0/b/${gcsBucket}/o/${encodeURIComponent(storagePath)}?alt=media`
+          },
+        },
       },
       enabled: Boolean(gcsBucket),
       options: gcsOptions,

@@ -160,7 +160,7 @@ export const Media: CollectionConfig = {
   upload: {
     mimeTypes: ['image/*', 'video/*'],
     modifyResponseHeaders: ({ headers }) => {
-      headers.set('Cache-Control', cacheControlByPreset.revalidate)
+      headers.set('Cache-Control', cacheControlByPreset['long-term'])
       return headers
     },
   },
