@@ -51,14 +51,13 @@ export function SiteHeader({ locale, settings }: Props) {
             className="hidden items-center gap-space-xs font-label-technical text-label-technical font-semibold uppercase tracking-widest sm:flex"
           >
             {(['es', 'fr', 'en'] as const).map((item) => (
-              <Link
+              <a
                 className={item === locale ? 'text-surface' : 'text-surface/45 hover:text-surface'}
-                href="/"
+                href={`/${item}`}
                 key={item}
-                locale={item}
               >
                 {item}
-              </Link>
+              </a>
             ))}
           </div>
           <Link
@@ -97,14 +96,13 @@ export function SiteHeader({ locale, settings }: Props) {
           ))}
           <div className="mt-space-md flex gap-space-md font-label-technical text-label-technical font-semibold uppercase">
             {(['es', 'fr', 'en'] as const).map((item) => (
-              <Link
+              <a
                 className={item === locale ? 'text-secondary-fixed-dim' : 'text-surface/60'}
-                href="/"
+                href={`/${item}`}
                 key={item}
-                locale={item}
               >
                 {item}
-              </Link>
+              </a>
             ))}
           </div>
         </nav>
