@@ -18,8 +18,10 @@ const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
 const databaseURL = process.env.DATABASE_URL || ''
 const usesFirestoreMongoDB = databaseURL.includes('.firestore.goog:')
+const serverURL = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3000'
 
 export default buildConfig({
+  serverURL,
   admin: {
     user: Users.slug,
     importMap: {
