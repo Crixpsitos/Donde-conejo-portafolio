@@ -1,4 +1,4 @@
-import { mongooseAdapter } from '@payloadcms/db-mongodb'
+import { compatibilityOptions, mongooseAdapter } from '@payloadcms/db-mongodb'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import { gcsStorage } from '@payloadcms/storage-gcs'
 import path from 'path'
@@ -16,6 +16,8 @@ import { createPreviewToken } from './utilities/preview-token'
 
 const filename = fileURLToPath(import.meta.url)
 const dirname = path.dirname(filename)
+const databaseURL = process.env.DATABASE_URL || ''
+const usesFirestoreMongoDB = databaseURL.includes('.firestore.goog:')
 
 export default buildConfig({
   admin: {
@@ -57,7 +59,19 @@ export default buildConfig({
     outputFile: path.resolve(dirname, 'payload-types.ts'),
   },
   db: mongooseAdapter({
-    url: process.env.DATABASE_URL || '',
+    url: databaseURL,
+    ...(usesFirestoreMongoDB ? compatibilityOptions.firestore : {}),
+    connectOptions: usesFirestoreMongoDB
+      ? {
+          connectTimeoutMS: 10_000,
+          maxConnecting: 2,
+          maxIdleTimeMS: 10_000,
+          maxPoolSize: 5,
+          minPoolSize: 0,
+          retryReads: true,
+          serverSelectionTimeoutMS: 15_000,
+        }
+      : undefined,
   }),
   sharp,
   plugins: [

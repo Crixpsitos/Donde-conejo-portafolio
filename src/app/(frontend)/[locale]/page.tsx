@@ -10,7 +10,9 @@ import {
 } from 'lucide-react'
 import type { Metadata } from 'next'
 import Image from 'next/image'
+import { notFound } from 'next/navigation'
 import { getPayload } from 'payload'
+import { cache, Fragment } from 'react'
 
 import { LivePreviewBridge } from '@/components/LivePreviewBridge'
 import { SensoryRadar } from '@/components/SensoryRadar'
@@ -52,6 +54,31 @@ const iconMap = {
 const getMediaUrl = (media: Media | null | string | undefined, fallback: string) =>
   typeof media === 'object' && media?.url ? media.url : fallback
 
+const getLocale = (value: string): Locale => {
+  if (!routing.locales.includes(value as Locale)) notFound()
+  return value as Locale
+}
+
+const isTransientDatabaseError = (error: unknown) =>
+  error instanceof Error &&
+  (error.name === 'MongoNetworkError' ||
+    (error.message.includes('connection') && error.message.includes('closed')) ||
+    error.message.includes('ECONNRESET'))
+
+const withDatabaseRetry = async <Value,>(operation: () => Promise<Value>): Promise<Value> => {
+  const retryDelays = [200, 600]
+
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      return await operation()
+    } catch (error) {
+      const delay = retryDelays[attempt]
+      if (delay === undefined || !isTransientDatabaseError(error)) throw error
+      await new Promise((resolve) => setTimeout(resolve, delay))
+    }
+  }
+}
+
 const mergeWithFallback = <Value,>(fallback: Value, value: unknown): Value => {
   if (value === null || value === undefined) return fallback
 
@@ -78,44 +105,66 @@ const mergeWithFallback = <Value,>(fallback: Value, value: unknown): Value => {
   return value as Value
 }
 
-async function getPageContent(locale: Locale, draft = false) {
+const getPageContent = cache(async (locale: Locale, draft = false) => {
   const payload = await getPayload({ config })
-  const [homepage, settings] = await Promise.all([
-    payload.findGlobal({
-      slug: 'homepage',
-      locale,
-      fallbackLocale: 'es',
-      depth: 2,
-      draft,
-    }),
-    payload.findGlobal({
-      slug: 'site-settings',
-      locale,
-      fallbackLocale: 'es',
-      depth: 1,
-    }),
-  ])
+  try {
+    const [homepage, settings] = await withDatabaseRetry(() =>
+      Promise.all([
+        payload.findGlobal({
+          slug: 'homepage',
+          locale,
+          fallbackLocale: 'es',
+          depth: 2,
+          draft,
+        }),
+        payload.findGlobal({
+          slug: 'site-settings',
+          locale,
+          fallbackLocale: 'es',
+          depth: 1,
+        }),
+      ]),
+    )
 
-  const hasSettings = Boolean(settings?.siteName && settings?.defaultMetaTitle)
+    const hasSettings = Boolean(settings?.siteName && settings?.defaultMetaTitle)
 
-  return {
-    homepage: mergeWithFallback(fallbackHomepage, homepage) as CompleteHomepage,
-    settings: (hasSettings ? settings : fallbackSiteSettings) as SiteSetting,
+    return {
+      homepage: mergeWithFallback(fallbackHomepage, homepage) as CompleteHomepage,
+      settings: (hasSettings ? settings : fallbackSiteSettings) as SiteSetting,
+    }
+  } catch (error) {
+    if (draft || !isTransientDatabaseError(error)) throw error
+
+    payload.logger.warn({
+      err: error,
+      msg: `Firestore no respondió después de los reintentos; se usará el contenido de respaldo para ${locale}`,
+    })
+
+    return {
+      homepage: fallbackHomepage as CompleteHomepage,
+      settings: fallbackSiteSettings as SiteSetting,
+    }
   }
-}
+})
 
 export function generateStaticParams() {
   return routing.locales.map((locale) => ({ locale }))
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
-  const { locale } = await params
-  const { settings } = await getPageContent(locale as Locale)
-  const image = getMediaUrl(settings.defaultShareImage, '')
+  const { locale: localeParam } = await params
+  const locale = getLocale(localeParam)
+  const { homepage, settings } = await getPageContent(locale)
+  const title = homepage.seo?.metaTitle || settings.defaultMetaTitle
+  const description = homepage.seo?.metaDescription || settings.defaultMetaDescription
+  const image = getMediaUrl(homepage.seo?.shareImage, getMediaUrl(settings.defaultShareImage, ''))
+  const allowIndexing =
+    homepage.seo?.indexing === 'index' ||
+    (homepage.seo?.indexing !== 'noindex' && settings.allowIndexing !== false)
 
   return {
-    title: settings.defaultMetaTitle,
-    description: settings.defaultMetaDescription,
+    title,
+    description,
     alternates: {
       canonical: `${settings.siteUrl}/${locale}`,
       languages: Object.fromEntries(
@@ -123,13 +172,13 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
       ),
     },
     openGraph: {
-      title: settings.defaultMetaTitle,
-      description: settings.defaultMetaDescription,
+      title,
+      description,
       images: image ? [image] : undefined,
       locale,
       type: 'website',
     },
-    robots: settings.allowIndexing === false ? { follow: false, index: false } : undefined,
+    robots: allowIndexing ? undefined : { follow: false, index: false },
   }
 }
 
@@ -171,7 +220,7 @@ function SectionHeading({
 
 export default async function HomePage({ params, searchParams }: PageProps) {
   const { locale: localeParam } = await params
-  const locale = localeParam as Locale
+  const locale = getLocale(localeParam)
   const { preview } = await searchParams
   const isPreview = verifyPreviewToken(typeof preview === 'string' ? preview : undefined, locale)
   const { homepage, settings } = await getPageContent(locale, isPreview)
@@ -181,6 +230,10 @@ export default async function HomePage({ params, searchParams }: PageProps) {
   ) as Location[]
   const visibleLocations = locations.length ? locations : fallbackLocations
   const heroImage = getMediaUrl(homepage.hero.portrait, fallbackImages.hero)
+  const heroImageAlt =
+    typeof homepage.hero.portrait === 'object' && homepage.hero.portrait?.alt
+      ? homepage.hero.portrait.alt
+      : homepage.hero.name
   const filterImage = getMediaUrl(homepage.craft.pillars?.[1]?.image, fallbackImages.filter)
 
   return (
@@ -189,69 +242,54 @@ export default async function HomePage({ params, searchParams }: PageProps) {
       <SiteHeader locale={locale} settings={settings} />
 
       <main className="overflow-hidden bg-background pt-20 text-on-surface">
-        <section
-          className="relative flex min-h-[45rem] items-end overflow-hidden bg-primary lg:h-[calc(100svh-6rem)] lg:min-h-[42.5rem]"
-          id="inicio"
-        >
-          <Image
-            alt="Juan David Conejo trabajando en una barra de café"
-            className="object-cover object-center"
-            data-preview-field="hero.portrait"
-            fill
-            priority
-            sizes="100vw"
-            src={heroImage}
-          />
-          <div className="absolute inset-0 bg-primary/65" />
-          <div className="relative z-10 mx-auto grid w-full max-w-[1440px] gap-gutter px-margin-mobile pb-space-xl pt-28 text-surface md:px-margin lg:grid-cols-12 lg:items-end">
-            <div className="lg:col-span-8">
-              <p className="mb-space-sm font-label-technical text-label-technical font-semibold uppercase tracking-widest text-secondary-fixed-dim">
-                {copy.sections.hero}
-              </p>
-              <p
-                className="mb-space-xs font-headline-sm text-headline-sm text-surface/75"
-                data-preview-field="hero.title"
-              >
+        <section className="editorial-hero" id="inicio">
+          <div className="editorial-hero__layout">
+            <div className="editorial-hero__portrait" data-preview-field="hero.portrait">
+              <Image
+                alt={heroImageAlt}
+                className="editorial-hero__image"
+                fill
+                priority
+                sizes="(max-width: 767px) 100vw, 56vw"
+                src={heroImage}
+              />
+              <div aria-hidden className="editorial-hero__image-grade" />
+            </div>
+
+            <div className="editorial-hero__content">
+              <p className="editorial-hero__eyebrow">{copy.sections.hero}</p>
+              <p className="editorial-hero__person" data-preview-field="hero.title">
                 {homepage.hero.title}
               </p>
-              <h1
-                className="font-display-hero text-display-hero uppercase text-surface max-md:font-display-hero-mobile max-md:text-display-hero-mobile"
-                data-preview-field="hero.name"
-              >
+              <h1 className="editorial-hero__title" data-preview-field="hero.name">
                 {homepage.hero.name}
               </h1>
-              <div className="mt-space-md flex flex-wrap items-center gap-x-space-sm gap-y-space-xs font-label-technical text-label-technical font-semibold uppercase tracking-widest text-surface/80">
+              <div className="editorial-hero__roles">
                 {homepage.hero.roles?.map((role, index) => (
                   <span
-                    className="flex items-center gap-space-sm"
+                    className="editorial-hero__role"
                     data-preview-field={`hero.roles.${index}.label`}
                     key={role.id || role.label}
                   >
-                    {index ? <span className="size-1.5 rounded-full bg-secondary" /> : null}
+                    {index ? <span aria-hidden className="editorial-hero__role-divider" /> : null}
                     {role.label}
                   </span>
                 ))}
               </div>
-              <blockquote
-                className="mt-space-lg max-w-3xl text-balance font-headline-xl text-headline-xl italic text-surface"
-                data-preview-field="hero.quote"
-              >
+              <blockquote className="editorial-hero__quote" data-preview-field="hero.quote">
                 “{homepage.hero.quote}”
               </blockquote>
-              <p
-                className="mt-space-md max-w-2xl font-body-xl text-body-xl text-surface/75"
-                data-preview-field="hero.description"
-              >
+              <p className="editorial-hero__description" data-preview-field="hero.description">
                 {homepage.hero.description}
               </p>
-              <div className="mt-space-lg flex flex-wrap gap-space-sm">
+              <div className="editorial-hero__actions">
                 {copy.heroActions.map((action, index) => (
                   <Link
-                    className={
+                    className={`editorial-hero__action ${
                       index === 0
-                        ? 'inline-flex items-center gap-space-sm rounded bg-secondary px-space-lg py-space-sm font-label-interactive text-label-interactive uppercase tracking-wider text-surface transition hover:bg-secondary-container hover:text-on-secondary-container'
-                        : 'inline-flex items-center gap-space-sm rounded border border-surface/40 px-space-lg py-space-sm font-label-interactive text-label-interactive uppercase tracking-wider transition hover:bg-surface hover:text-primary'
-                    }
+                        ? 'editorial-hero__action--primary'
+                        : 'editorial-hero__action--secondary'
+                    }`}
                     href={action.href}
                     key={action.href}
                   >
@@ -261,21 +299,22 @@ export default async function HomePage({ params, searchParams }: PageProps) {
                 ))}
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-space-sm sm:grid-cols-4 lg:col-span-4 lg:grid-cols-2">
+
+            <div className="editorial-hero__metrics">
               {homepage.hero.metrics?.map((metric, index) => (
                 <div
-                  className="min-h-28 rounded bg-primary-container/90 p-space-md backdrop-blur-sm"
+                  className={`editorial-hero__metric ${metric.accent ? 'editorial-hero__metric--accent' : ''}`}
                   data-preview-field={`hero.metrics.${index}.accent`}
                   key={metric.id || metric.label}
                 >
                   <strong
-                    className={`block font-label-numeric text-headline-md ${metric.accent ? 'text-secondary-fixed-dim' : 'text-surface'}`}
+                    className="editorial-hero__metric-value"
                     data-preview-field={`hero.metrics.${index}.value`}
                   >
                     {metric.value}
                   </strong>
                   <span
-                    className="mt-space-xs block font-label-technical text-label-technical font-semibold uppercase tracking-wider text-outline-variant"
+                    className="editorial-hero__metric-label"
                     data-preview-field={`hero.metrics.${index}.label`}
                   >
                     {metric.label}
@@ -286,61 +325,59 @@ export default async function HomePage({ params, searchParams }: PageProps) {
           </div>
         </section>
 
-        <section
-          className="bg-primary px-margin-mobile py-space-xl text-surface md:px-margin"
-          id="historia"
-        >
-          <div className="mx-auto grid max-w-[1440px] gap-gutter lg:grid-cols-12">
-            <div className="lg:col-span-2">
-              <p className="font-label-technical text-label-technical font-semibold uppercase tracking-widest text-secondary-fixed-dim">
-                {copy.sections.manifesto}
-              </p>
-              <div className="mt-space-md h-1 w-8 rounded bg-secondary" />
-            </div>
-            <div className="lg:col-span-7">
-              <blockquote
-                className="text-balance font-display-hero text-headline-xl italic text-surface-container-low md:text-display-hero"
-                data-preview-field="manifesto.quote"
-              >
-                “{homepage.manifesto.quote}”
-              </blockquote>
-              <div className="mt-space-md grid gap-space-lg font-body-lg text-body-lg text-outline-variant md:grid-cols-2">
-                {homepage.manifesto.principles?.map((principle, index) => (
-                  <p
-                    data-preview-field={`manifesto.principles.${index}.text`}
-                    key={principle.id || principle.text}
-                  >
-                    {principle.text}
-                  </p>
-                ))}
-              </div>
-            </div>
-            <div className="space-y-space-md lg:col-span-3">
-              {homepage.manifesto.facts?.map((fact, index) => (
-                <div
-                  className="rounded bg-primary-container p-space-md"
-                  key={fact.id || fact.label}
-                >
-                  <span
-                    className="font-label-technical text-label-technical font-semibold uppercase tracking-widest text-secondary-fixed-dim"
-                    data-preview-field={`manifesto.facts.${index}.label`}
-                  >
-                    {fact.label}
-                  </span>
-                  <strong
-                    className="mt-space-xs block font-headline-sm text-headline-sm font-light text-surface"
-                    data-preview-field={`manifesto.facts.${index}.value`}
-                  >
-                    {fact.value}
-                  </strong>
-                  <span
-                    className="mt-space-xs block font-body-sm text-body-sm text-outline-variant"
-                    data-preview-field={`manifesto.facts.${index}.detail`}
-                  >
-                    {fact.detail}
-                  </span>
-                </div>
-              ))}
+        <section className="manifesto-editorial" id="historia">
+          <div className="manifesto-editorial__layout">
+            <p className="manifesto-editorial__marker">{copy.sections.manifesto}</p>
+
+            <blockquote className="manifesto-editorial__quote" data-preview-field="manifesto.quote">
+              “{homepage.manifesto.quote}”
+            </blockquote>
+
+            <div className="manifesto-editorial__composition">
+              {Array.from({
+                length: Math.max(
+                  homepage.manifesto.principles?.length || 0,
+                  homepage.manifesto.facts?.length || 0,
+                ),
+              }).map((_, index) => {
+                const principle = homepage.manifesto.principles?.[index]
+                const fact = homepage.manifesto.facts?.[index]
+
+                return (
+                  <Fragment key={principle?.id || fact?.id || index}>
+                    {principle ? (
+                      <p
+                        className="manifesto-editorial__principle"
+                        data-preview-field={`manifesto.principles.${index}.text`}
+                      >
+                        {principle.text}
+                      </p>
+                    ) : null}
+                    {fact ? (
+                      <article className="manifesto-editorial__fact">
+                        <span
+                          className="manifesto-editorial__fact-label"
+                          data-preview-field={`manifesto.facts.${index}.label`}
+                        >
+                          {fact.label}
+                        </span>
+                        <strong
+                          className="manifesto-editorial__fact-value"
+                          data-preview-field={`manifesto.facts.${index}.value`}
+                        >
+                          {fact.value}
+                        </strong>
+                        <span
+                          className="manifesto-editorial__fact-detail"
+                          data-preview-field={`manifesto.facts.${index}.detail`}
+                        >
+                          {fact.detail}
+                        </span>
+                      </article>
+                    ) : null}
+                  </Fragment>
+                )
+              })}
             </div>
           </div>
         </section>

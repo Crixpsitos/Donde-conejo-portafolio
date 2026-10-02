@@ -50,9 +50,9 @@ const makeFieldsOptional = (fields: Field[]): Field[] =>
 
 export const Homepage: GlobalConfig = {
   slug: 'homepage',
-  label: 'Portada',
+  label: 'Home',
   admin: {
-    group: 'Contenido',
+    group: 'Páginas',
     description: 'Puedes guardar y publicar únicamente los campos que necesites completar.',
     components: {
       elements: {
@@ -527,6 +527,53 @@ export const Homepage: GlobalConfig = {
                       localized: true,
                       required: true,
                     },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          label: 'SEO',
+          fields: [
+            {
+              name: 'seo',
+              label: 'SEO de Home',
+              type: 'group',
+              admin: {
+                description:
+                  'Personaliza cómo aparece Home en buscadores y redes. Los campos vacíos usan la configuración general del sitio.',
+              },
+              fields: [
+                {
+                  name: 'metaTitle',
+                  label: 'Título SEO',
+                  type: 'text',
+                  localized: true,
+                  maxLength: 60,
+                },
+                {
+                  name: 'metaDescription',
+                  label: 'Descripción SEO',
+                  type: 'textarea',
+                  localized: true,
+                  maxLength: 160,
+                },
+                {
+                  name: 'shareImage',
+                  label: 'Imagen para compartir',
+                  type: 'upload',
+                  relationTo: 'media',
+                },
+                {
+                  name: 'indexing',
+                  label: 'Indexación',
+                  type: 'select',
+                  defaultValue: 'inherit',
+                  options: [
+                    { label: 'Heredar configuración general', value: 'inherit' },
+                    { label: 'Permitir indexación', value: 'index' },
+                    { label: 'No indexar esta página', value: 'noindex' },
                   ],
                 },
               ],

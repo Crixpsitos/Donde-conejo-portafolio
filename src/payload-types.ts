@@ -624,6 +624,15 @@ export interface Homepage {
         }[]
       | null;
   };
+  /**
+   * Personaliza cómo aparece Home en buscadores y redes. Los campos vacíos usan la configuración general del sitio.
+   */
+  seo?: {
+    metaTitle?: string | null;
+    metaDescription?: string | null;
+    shareImage?: (string | null) | Media;
+    indexing?: ('inherit' | 'index' | 'noindex') | null;
+  };
   _status?: ('draft' | 'published') | null;
   updatedAt?: string | null;
   createdAt?: string | null;
@@ -831,6 +840,14 @@ export interface HomepageSelect<T extends boolean = true> {
               label?: T;
               id?: T;
             };
+      };
+  seo?:
+    | T
+    | {
+        metaTitle?: T;
+        metaDescription?: T;
+        shareImage?: T;
+        indexing?: T;
       };
   _status?: T;
   updatedAt?: T;
