@@ -31,7 +31,7 @@ export default buildConfig({
 
         const localeCode = locale?.code || 'es'
         const token = createPreviewToken(localeCode, String(req.user.id))
-        return `/${localeCode}?preview=${encodeURIComponent(token)}`
+        return `/${localeCode}/preview?preview=${encodeURIComponent(token)}`
       },
       globals: [Homepage.slug],
       openByDefault: true,

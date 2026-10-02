@@ -1,5 +1,7 @@
 import type { Field, GlobalConfig } from 'payload'
 
+import { revalidatePageContent } from '@/hooks/revalidate-page-content'
+
 const sectionIntro = (): Field[] => [
   {
     name: 'title',
@@ -63,6 +65,9 @@ export const Homepage: GlobalConfig = {
   access: {
     read: () => true,
     update: ({ req: { user } }) => Boolean(user),
+  },
+  hooks: {
+    afterChange: [revalidatePageContent],
   },
   fields: makeFieldsOptional([
     {

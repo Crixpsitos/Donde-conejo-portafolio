@@ -1,5 +1,7 @@
 import type { GlobalConfig } from 'payload'
 
+import { revalidatePageContent } from '@/hooks/revalidate-page-content'
+
 export const SiteSettings: GlobalConfig = {
   slug: 'site-settings',
   label: 'Configuración del sitio',
@@ -9,6 +11,9 @@ export const SiteSettings: GlobalConfig = {
   access: {
     read: () => true,
     update: ({ req: { user } }) => Boolean(user),
+  },
+  hooks: {
+    afterChange: [revalidatePageContent],
   },
   fields: [
     {
