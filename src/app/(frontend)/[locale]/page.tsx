@@ -5,7 +5,6 @@ import HomepagePage, {
 import { routing } from '@/i18n/routing'
 
 export const dynamic = 'force-static'
-export const dynamicParams = false
 export const revalidate = 3600
 
 export function generateStaticParams() {
